@@ -17,7 +17,7 @@ def classify_ticket(description):
     
     if api_key.startswith("gsk_"):
         base_url = "https://api.groq.com/openai/v1/chat/completions"
-        model = "llama3-8b-8192"
+        model = "llama-3.3-70b-versatile"
 
     prompt = f"""
     Analyze the following support ticket description and classify it.
@@ -47,24 +47,55 @@ def classify_ticket(description):
             json=data,
             timeout=10
         )
-        response.raise_for_status()
-        result = response.json()
-        content = result['choices'][0]['message']['content'].strip()
+        print(f"LLM API Status: {response.status_code}")
         
+        if response.status_code != 200:
+            print(f"LLM API Error: {response.text}")
+            response.raise_for_status()
+
+        result = response.json()
+        print(f"LLM API Result: {result}")
+
+        if 'choices' not in result:
+             print(f"Error: 'choices' missing from response: {result}")
+             return {"suggested_category": "general", "suggested_priority": "medium"}
+
+        content = result['choices'][0]['message']['content'].strip()
+        print(f"LLM Content: {content}")
+        
+        # Strip potential markdown formatting
+        if content.startswith("```"):
+            content = content.split("```")[1]
+            if content.startswith("json"):
+                content = content[4:]
+            content = content.strip("`").strip()
+
         # Parse JSON from content
-        classification = json.loads(content)
+        try:
+            classification = json.loads(content)
+        except json.JSONDecodeError:
+            print(f"Failed to parse JSON from content: {content}")
+            return {"suggested_category": "general", "suggested_priority": "medium"}
         
         # Validate output
         valid_categories = ['billing', 'technical', 'account', 'general']
         valid_priorities = ['low', 'medium', 'high', 'critical']
         
-        if classification.get("suggested_category") not in valid_categories:
-            classification["suggested_category"] = "general"
-        if classification.get("suggested_priority") not in valid_priorities:
-            classification["suggested_priority"] = "medium"
+        cat = classification.get("suggested_category", "").lower()
+        prio = classification.get("suggested_priority", "").lower()
+
+        if cat not in valid_categories:
+            cat = "general"
+        if prio not in valid_priorities:
+            prio = "medium"
             
-        return classification
+        return {
+            "suggested_category": cat,
+            "suggested_priority": prio
+        }
 
     except Exception as e:
         print(f"LLM Classification failed: {e}")
+        import traceback
+        traceback.print_exc()
         return {"suggested_category": "general", "suggested_priority": "medium"}
