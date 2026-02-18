@@ -1,0 +1,10 @@
+.env
+.env.*
+node_modules/
+__pycache__/
+*.py[cod]
+*$py.class
+dist/
+build/
+.vscode/
+frontend_logs.txt
